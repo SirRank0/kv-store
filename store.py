@@ -80,3 +80,11 @@ class KeyValueStore:
     def delete(self, key: str) -> None:
         self._remember(key)
         self._data.pop(key, None)
+        
+    def keys_with_prefix(self, prefix: str) -> list[str]:
+        keys = []
+        for key in list(self._data):
+            if  key.startswith(prefix) and self.get(key) is not None:
+                keys.append(key)
+        return sorted(keys)
+       
