@@ -76,3 +76,7 @@ class KeyValueStore:
         if self._undo is None or key in self._undo:
             return
         self._undo[key] = self._data.get(key)
+        
+    def delete(self, key: str) -> None:
+        self._remember(key)
+        self._data.pop(key, None)
