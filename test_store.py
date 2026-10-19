@@ -330,4 +330,22 @@ def test_begin_records_only_keys_that_change() -> None:
     assert store.get("city") == "madison"
 
 
+def test_sorted_keys_follow_add_delete_and_rollback() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.set("score", "10")
+    store.set("city", "madison")
+    store.set("school", "east")
+    store.set("score", "11")
+    assert store._keys == ["city", "school", "score"]
+    store.begin()
+    store.set("stem", "yes")
+    store.delete("school")
+    assert store._keys == ["city", "score", "stem"]
+    assert store.keys_with_prefix("s") == ["score", "stem"]
+    store.rollback()
+    assert store._keys == ["city", "school", "score"]
+    assert store.keys_with_prefix("s") == ["school", "score"]
+
+
+
 

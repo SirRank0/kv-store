@@ -10,6 +10,7 @@ moves those notes to the outer log. ROLLBACK writes the notes back.
 from __future__ import annotations
 
 from collections.abc import Callable
+import bisect
 import time
 from typing import NamedTuple
 
@@ -27,6 +28,7 @@ class KeyValueStore:
     def __init__(self, clock: Callable[[], float] | None = None) -> None:
         self._clock = clock or time.monotonic
         self._data: dict[str, _Record] = {}
+        self._keys: list[str] = []
         # Newest log is the innermost transaction. A missing key in a log
         # means that transaction has not changed it. A stored None means the
         # key was absent before this transaction changed it.
@@ -37,8 +39,11 @@ class KeyValueStore:
         if ttl is not None and ttl < 0:
             raise ValueError("ttl must be >= 0")
         self._note(key)
+        is_new = key not in self._data
         expires_at = None if ttl is None else self._clock() + ttl
         self._data[key] = _Record(value, expires_at)
+        if is_new:
+            self._index_add(key)
 
     def get(self, key: str) -> str | None:
         """Return the value, or None if the key is missing or expired."""
@@ -50,6 +55,7 @@ class KeyValueStore:
             # ROLLBACK restores the noted value, expiry included.
             if not self._logs:
                 del self._data[key]
+                self._index_remove(key)
             return None
         return record.value
 
@@ -73,13 +79,30 @@ class KeyValueStore:
         log = self._logs.pop()
         for key, previous in log.items():
             if previous is None:
-                self._data.pop(key, None)
+                if key in self._data:
+                    del self._data[key]
+                    self._index_remove(key)
             else:
+                was_missing = key not in self._data
                 self._data[key] = previous
+                if was_missing:
+                    self._index_add(key)
 
     def delete(self, key: str) -> None:
         self._note(key)
-        self._data.pop(key, None)
+        if key in self._data:
+            del self._data[key]
+            self._index_remove(key)
+
+    def _index_add(self, key: str) -> None:
+        index = bisect.bisect_left(self._keys, key)
+        if index == len(self._keys) or self._keys[index] != key:
+            self._keys.insert(index, key)
+
+    def _index_remove(self, key: str) -> None:
+        index = bisect.bisect_left(self._keys, key)
+        if index < len(self._keys) and self._keys[index] == key:
+            del self._keys[index]
 
     def _note(self, key: str) -> None:
         if not self._logs:
@@ -89,9 +112,11 @@ class KeyValueStore:
             log[key] = self._data.get(key)
 
     def keys_with_prefix(self, prefix: str) -> list[str]:
-        keys = []
-        for key in list(self._data):
-            if key.startswith(prefix) and self.get(key) is not None:
-                keys.append(key)
-        return sorted(keys)
+        start = bisect.bisect_left(self._keys, prefix)
+        stop = start
+        while stop < len(self._keys) and self._keys[stop].startswith(prefix):
+            stop += 1
+        # Copy first. get() may drop an expired key from the sorted list.
+        matched = self._keys[start:stop]
+        return [key for key in matched if self.get(key) is not None]
 
