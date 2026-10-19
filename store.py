@@ -10,9 +10,10 @@ moves those notes to the outer log. ROLLBACK writes the notes back.
 from __future__ import annotations
 
 from collections.abc import Callable
-import bisect
 import time
 from typing import NamedTuple
+
+from sortedcontainers import SortedList
 
 
 class StoreError(Exception):
@@ -28,7 +29,7 @@ class KeyValueStore:
     def __init__(self, clock: Callable[[], float] | None = None) -> None:
         self._clock = clock or time.monotonic
         self._data: dict[str, _Record] = {}
-        self._keys: list[str] = []
+        self._keys: SortedList[str] = SortedList()
         # Newest log is the innermost transaction. A missing key in a log
         # means that transaction has not changed it. A stored None means the
         # key was absent before this transaction changed it.
@@ -95,14 +96,10 @@ class KeyValueStore:
             self._index_remove(key)
 
     def _index_add(self, key: str) -> None:
-        index = bisect.bisect_left(self._keys, key)
-        if index == len(self._keys) or self._keys[index] != key:
-            self._keys.insert(index, key)
+        self._keys.add(key)
 
     def _index_remove(self, key: str) -> None:
-        index = bisect.bisect_left(self._keys, key)
-        if index < len(self._keys) and self._keys[index] == key:
-            del self._keys[index]
+        self._keys.discard(key)
 
     def _note(self, key: str) -> None:
         if not self._logs:
@@ -112,7 +109,7 @@ class KeyValueStore:
             log[key] = self._data.get(key)
 
     def keys_with_prefix(self, prefix: str) -> list[str]:
-        start = bisect.bisect_left(self._keys, prefix)
+        start = self._keys.bisect_left(prefix)
         stop = start
         while stop < len(self._keys) and self._keys[stop].startswith(prefix):
             stop += 1
