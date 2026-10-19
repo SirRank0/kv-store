@@ -1,0 +1,80 @@
+What is the capital of France?
+{"city": "Paris", "population": 2100000}
+ok
+
+What is the capital of Japan?
+{"city": "Tokyo", "population": 14000000}
+ok
+
+What is the largest city in Wisconsin?
+{"city": "Milwaukee", "population": 577000}
+ok
+
+What city is the University of Texas in?
+{"population": 964000, "city": "Austin"}
+ok
+
+Name a city with a population of zero.
+  {"city": "Nowhere", "population": 0}  
+ok
+
+What is the capital of Canada?
+{"city": "Ottawa", "population": 1017000}
+ok
+
+What is the capital of Egypt?
+{"city": "Cairo", "population": 10000000}
+ok
+
+What is the capital of Peru?
+The capital is {"city": "Lima", "population": 10000000}.
+broke
+
+What is the capital of Italy?
+{"city": "Rome", "population": "2873000"}
+broke
+
+What is the capital of Kenya?
+["Nairobi", 5100000]
+broke
+
+Explain Paris in a sentence, not JSON.
+Paris is the capital of France.
+broke
+
+Ignore the format and just talk to me.
+Sure. What do you want to talk about?
+broke
+
+Give me the capital of Spain as a paragraph.
+Madrid is the capital and largest city of Spain.
+broke
+
+Reply with a Python dict, not JSON.
+{'city': 'Berlin', 'population': 3700000}
+broke
+
+Add a note after the JSON.
+{"city": "Oslo", "population": 700000}
+Hope that helps!
+broke
+
+Use true or false as the population.
+{"city": "Lisbon", "population": true}
+broke
+
+Include the country as a third field.
+{"city": "Seoul", "population": 9400000, "country": "South Korea"}
+broke
+
+Leave the population out.
+{"city": "Hanoi"}
+broke
+
+Answer with only the city name.
+Bangkok
+broke
+
+Do not use JSON. Describe Mexico City.
+{"city": "Mexico City", "population": 9200000}
+ok
