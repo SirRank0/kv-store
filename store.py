@@ -1,9 +1,9 @@
-"""In-memory key-value store with expiry and single-level transactions.
+"""In-memory key-value store with expiry and nested transactions.
 
 Values live in a dict, so GET and SET stay one lookup. An expiry is a
 deadline stored beside the value and checked on read, not a timer.
-A transaction keeps an undo log of the first version of each key written
-during that transaction. COMMIT drops the log. ROLLBACK writes it back.
+Each BEGIN saves a copy of the whole store. COMMIT drops the newest copy.
+ROLLBACK replaces the live store with that copy.
 """
 
 from __future__ import annotations
@@ -26,16 +26,12 @@ class KeyValueStore:
     def __init__(self, clock: Callable[[], float] | None = None) -> None:
         self._clock = clock or time.monotonic
         self._data: dict[str, _Record] = {}
-        # None means no transaction is open. Otherwise maps a key to the
-        # record it had before the first write in this transaction, or None
-        # if the key was absent.
-        self._undo: dict[str, _Record | None] | None = None
+        self._snapshots: list[dict[str, _Record]] = []
 
     def set(self, key: str, value: str, ttl: float | None = None) -> None:
         """Store value under key. ttl is seconds from now, or None to keep it."""
         if ttl is not None and ttl < 0:
             raise ValueError("ttl must be >= 0")
-        self._remember(key)
         expires_at = None if ttl is None else self._clock() + ttl
         self._data[key] = _Record(value, expires_at)
 
@@ -45,40 +41,27 @@ class KeyValueStore:
         if record is None:
             return None
         if record.expires_at is not None and self._clock() >= record.expires_at:
-            # Leave the record in place during a transaction so ROLLBACK can
-            # still restore the pre-transaction version.
-            if self._undo is None:
+            # Leave the record in place during a transaction. ROLLBACK
+            # restores the whole snapshot, including a key that has since expired.
+            if not self._snapshots:
                 del self._data[key]
             return None
         return record.value
 
     def begin(self) -> None:
-        if self._undo is not None:
-            raise StoreError("transaction already open")
-        self._undo = {}
+        self._snapshots.append(dict(self._data))
 
     def commit(self) -> None:
-        if self._undo is None:
+        if not self._snapshots:
             raise StoreError("no transaction open")
-        self._undo = None
+        self._snapshots.pop()
 
     def rollback(self) -> None:
-        if self._undo is None:
+        if not self._snapshots:
             raise StoreError("no transaction open")
-        for key, previous in self._undo.items():
-            if previous is None:
-                self._data.pop(key, None)
-            else:
-                self._data[key] = previous
-        self._undo = None
-
-    def _remember(self, key: str) -> None:
-        if self._undo is None or key in self._undo:
-            return
-        self._undo[key] = self._data.get(key)
+        self._data = self._snapshots.pop()
 
     def delete(self, key: str) -> None:
-        self._remember(key)
         self._data.pop(key, None)
 
     def keys_with_prefix(self, prefix: str) -> list[str]:

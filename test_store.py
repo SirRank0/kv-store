@@ -123,8 +123,6 @@ def test_transaction_state_errors() -> None:
     with pytest.raises(StoreError):
         store.rollback()
     store.begin()
-    with pytest.raises(StoreError):
-        store.begin()
     store.commit()
     with pytest.raises(StoreError):
         store.rollback()
@@ -209,9 +207,10 @@ def test_key_created_in_transaction_then_deleted() -> None:
 def test_delete_does_not_open_a_transaction() -> None:
     store = KeyValueStore(clock=Clock())
     store.delete("score")
-    store.begin()
     with pytest.raises(StoreError):
-        store.begin()
+        store.commit()
+    with pytest.raises(StoreError):
+        store.rollback()
 
 
 def test_keys_with_prefix_matches_and_sorts() -> None:
@@ -267,3 +266,53 @@ def test_keys_with_prefix_omits_key_expired_inside_transaction() -> None:
     assert store.keys_with_prefix("") == ["score"]
     store.rollback()
     assert store.get("city") is None
+
+
+def test_nested_rollback_returns_to_outer_value() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.set("score", "10")
+    store.begin()
+    store.set("score", "11")
+    store.begin()
+    store.set("score", "12")
+    store.rollback()
+    assert store.get("score") == "11"
+    store.commit()
+    assert store.get("score") == "11"
+
+
+def test_nested_delete_rollback_then_outer_rollback() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.set("score", "10")
+    store.begin()
+    store.set("score", "11")
+    store.begin()
+    store.delete("score")
+    store.rollback()
+    assert store.get("score") == "11"
+    store.rollback()
+    assert store.get("score") == "10"
+
+
+def test_outer_rollback_removes_key_added_inside_committed_inner() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.set("score", "10")
+    store.begin()
+    store.begin()
+    store.set("city", "madison")
+    store.commit()
+    store.rollback()
+    assert store.get("city") is None
+    assert store.get("score") == "10"
+
+
+def test_nested_commits_then_extra_commit_raises() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.begin()
+    store.begin()
+    store.commit()
+    store.commit()
+    with pytest.raises(StoreError):
+        store.commit()
+
+
