@@ -6,7 +6,7 @@ In-memory key-value store.
 - `delete`
 - `keys_with_prefix`
 - expiry stored as a deadline and checked on read
-- nested transactions: each begin saves a copy of the whole store
+- nested transactions: each begin starts an empty log of keys that later change
 
 ## Reply checks
 

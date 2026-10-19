@@ -316,3 +316,18 @@ def test_nested_commits_then_extra_commit_raises() -> None:
         store.commit()
 
 
+def test_begin_records_only_keys_that_change() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.set("score", "10")
+    store.set("city", "madison")
+    store.begin()
+    assert store._logs == [{}]
+    store.set("score", "11")
+    assert list(store._logs[0]) == ["score"]
+    assert store._logs[0]["score"].value == "10"
+    store.rollback()
+    assert store.get("score") == "10"
+    assert store.get("city") == "madison"
+
+
+
