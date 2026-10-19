@@ -381,6 +381,65 @@ def test_prefix_and_get_both_finish() -> None:
     assert errors == []
 
 
+def test_restart_keeps_committed_set(tmp_path) -> None:
+    path = tmp_path / "store.json"
+    clock = Clock()
+    store = KeyValueStore(clock=clock, path=path)
+    store.set("score", "10")
+    restarted = KeyValueStore(clock=clock, path=path)
+    assert restarted.get("score") == "10"
+
+
+def test_restart_drops_uncommitted_write(tmp_path) -> None:
+    path = tmp_path / "store.json"
+    clock = Clock()
+    store = KeyValueStore(clock=clock, path=path)
+    store.set("score", "10")
+    store.begin()
+    store.set("score", "11")
+    restarted = KeyValueStore(clock=clock, path=path)
+    assert restarted.get("score") == "10"
+    assert restarted._logs == []
+
+
+def test_restart_keeps_outermost_commit(tmp_path) -> None:
+    path = tmp_path / "store.json"
+    clock = Clock()
+    store = KeyValueStore(clock=clock, path=path)
+    store.begin()
+    store.set("city", "madison")
+    store.commit()
+    restarted = KeyValueStore(clock=clock, path=path)
+    assert restarted.get("city") == "madison"
+
+
+def test_restart_drops_inner_commit_before_outer_commit(tmp_path) -> None:
+    path = tmp_path / "store.json"
+    clock = Clock()
+    store = KeyValueStore(clock=clock, path=path)
+    store.set("score", "10")
+    store.begin()
+    store.begin()
+    store.set("city", "madison")
+    store.commit()
+    restarted = KeyValueStore(clock=clock, path=path)
+    assert restarted.get("city") is None
+    assert restarted.get("score") == "10"
+
+
+def test_restart_keeps_expiry_deadline(tmp_path) -> None:
+    path = tmp_path / "store.json"
+    clock = Clock()
+    store = KeyValueStore(clock=clock, path=path)
+    store.set("city", "madison", ttl=5)
+    clock.advance(4)
+    restarted = KeyValueStore(clock=clock, path=path)
+    assert restarted.get("city") == "madison"
+    clock.advance(1)
+    assert restarted.get("city") is None
+
+
+
 
 
 

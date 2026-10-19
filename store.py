@@ -1,15 +1,19 @@
-"""In-memory key-value store with expiry and nested transactions.
+"""In-memory key-value store with expiry, nested transactions, and a file.
 
 Values live in a dict, so GET and SET stay one lookup. An expiry is a
 deadline stored beside the value and checked on read, not a timer.
 Each BEGIN starts an empty undo log. The log records a key's old value
 only when that transaction changes it. COMMIT keeps the live store and
 moves those notes to the outer log. ROLLBACK writes the notes back.
+A path, if given, stores only the committed data as JSON. A restart is a
+new store on that path: open transactions are gone.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
+from pathlib import Path
 import threading
 import time
 from typing import NamedTuple
@@ -27,7 +31,11 @@ class _Record(NamedTuple):
 
 
 class KeyValueStore:
-    def __init__(self, clock: Callable[[], float] | None = None) -> None:
+    def __init__(
+        self,
+        clock: Callable[[], float] | None = None,
+        path: str | Path | None = None,
+    ) -> None:
         self._clock = clock or time.monotonic
         self._data: dict[str, _Record] = {}
         self._keys: SortedList[str] = SortedList()
@@ -36,6 +44,9 @@ class KeyValueStore:
         # key was absent before this transaction changed it.
         self._logs: list[dict[str, _Record | None]] = []
         self._lock = threading.RLock()
+        self._path = Path(path) if path is not None else None
+        if self._path is not None and self._path.exists():
+            self._load()
 
     def set(self, key: str, value: str, ttl: float | None = None) -> None:
         """Store value under key. ttl is seconds from now, or None to keep it."""
@@ -48,6 +59,8 @@ class KeyValueStore:
             self._data[key] = _Record(value, expires_at)
             if is_new:
                 self._index_add(key)
+            if not self._logs:
+                self._save()
 
     def get(self, key: str) -> str | None:
         """Return the value, or None if the key is missing or expired."""
@@ -61,6 +74,7 @@ class KeyValueStore:
                 if not self._logs:
                     del self._data[key]
                     self._index_remove(key)
+                    self._save()
                 return None
             return record.value
 
@@ -74,6 +88,7 @@ class KeyValueStore:
                 raise StoreError("no transaction open")
             log = self._logs.pop()
             if not self._logs:
+                self._save()
                 return
             outer = self._logs[-1]
             for key, previous in log.items():
@@ -102,6 +117,8 @@ class KeyValueStore:
             if key in self._data:
                 del self._data[key]
                 self._index_remove(key)
+            if not self._logs:
+                self._save()
 
     def _index_add(self, key: str) -> None:
         self._keys.add(key)
@@ -115,6 +132,26 @@ class KeyValueStore:
         log = self._logs[-1]
         if key not in log:
             log[key] = self._data.get(key)
+
+    def _load(self) -> None:
+        raw = json.loads(self._path.read_text())
+        self._data = {}
+        self._keys = SortedList()
+        for key, item in raw.items():
+            self._data[key] = _Record(item["value"], item["expires_at"])
+            self._keys.add(key)
+        self._logs = []
+
+    def _save(self) -> None:
+        if self._path is None:
+            return
+        payload = {
+            key: {"value": record.value, "expires_at": record.expires_at}
+            for key, record in self._data.items()
+        }
+        temporary = self._path.with_suffix(self._path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload))
+        temporary.replace(self._path)
 
     def keys_with_prefix(self, prefix: str) -> list[str]:
         with self._lock:
