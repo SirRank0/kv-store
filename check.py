@@ -15,3 +15,10 @@ def check_reply(reply: str) -> str:
     ):
         return "ok"
     return "broke"
+
+
+def weak_check(reply: str) -> str:
+    """Return "ok" if both field names appear, even when the JSON is invalid."""
+    if '"city"' in reply and '"population"' in reply:
+        return "ok"
+    return "broke"
