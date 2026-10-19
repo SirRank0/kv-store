@@ -76,15 +76,15 @@ class KeyValueStore:
         if self._undo is None or key in self._undo:
             return
         self._undo[key] = self._data.get(key)
-        
+
     def delete(self, key: str) -> None:
         self._remember(key)
         self._data.pop(key, None)
-        
+
     def keys_with_prefix(self, prefix: str) -> list[str]:
         keys = []
         for key in list(self._data):
-            if  key.startswith(prefix) and self.get(key) is not None:
+            if key.startswith(prefix) and self.get(key) is not None:
                 keys.append(key)
         return sorted(keys)
-       
+
