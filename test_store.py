@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 
 from store import KeyValueStore, StoreError
@@ -345,6 +347,39 @@ def test_sorted_keys_follow_add_delete_and_rollback() -> None:
     store.rollback()
     assert store._keys == ["city", "school", "score"]
     assert store.keys_with_prefix("s") == ["school", "score"]
+
+
+def test_prefix_and_get_both_finish() -> None:
+    store = KeyValueStore(clock=Clock())
+    store.set("score", "10")
+    store.set("school", "east")
+    errors: list[BaseException] = []
+
+    def read_prefix() -> None:
+        try:
+            for _ in range(100):
+                assert store.keys_with_prefix("s") == ["school", "score"]
+        except BaseException as exc:
+            errors.append(exc)
+
+    def read_score() -> None:
+        try:
+            for _ in range(100):
+                assert store.get("score") == "10"
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=read_prefix),
+        threading.Thread(target=read_score),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    assert errors == []
+
 
 
 
